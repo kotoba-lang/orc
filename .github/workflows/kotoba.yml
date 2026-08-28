@@ -22,10 +22,12 @@ on:
     paths:
       - "kotoba/**"
       - ".github/workflows/kotoba.yml"
+      - ".github/workflows/kotoba*.yml"
   pull_request:
     paths:
       - "kotoba/**"
       - ".github/workflows/kotoba.yml"
+      - ".github/workflows/kotoba*.yml"
 
 jobs:
   header:

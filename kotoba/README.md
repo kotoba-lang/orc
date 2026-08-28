@@ -43,15 +43,15 @@ Requires Linux amd64, or `KOTOBA` pointing at a Kotoba 0.7.2 CLI.
 kotoba/checks.sh
 ```
 
-The script fails unless all of the following are observed in CLI output
-(not assumed):
+The script fails unless all of the following are observed (not assumed):
 
-1. `kotoba compile orc.kotoba --target wasm` reports
-   `:compile/emitted`, `:target :wasm32-kotoba-v1`,
-   `:value-abi :kotoba.i64/direct-v1`, `:value-profile :kotoba.value/i64-v1`.
-2. `kotoba run orc.kotoba` reports `:kotoba.runtime/ok? true` and
+1. `kotoba compile orc.kotoba --target wasm --json` parses as JSON with
+   `kotoba.cli/ok?` true and `kotoba.cli/code` equal to `emitted`, plus
+   `value-profile` `i64-v1` and compatibility `target` `wasm32-kotoba-v1`.
+2. The emitted wasm has no import section (section id 2).
+3. `kotoba run orc.kotoba` reports `:kotoba.runtime/ok? true` and
    `:kotoba.runtime/value 111102`.
-3. Every `fixture-byte` literal in `orc.kotoba` matches `fixtures/tiny.orc`.
+4. Every `fixture-byte` literal in `orc.kotoba` matches `fixtures/tiny.orc`.
 
 `111102` means: header magic, postscript magic, compression `NONE`, field
 name `id`, 0 stripes, 2 types.

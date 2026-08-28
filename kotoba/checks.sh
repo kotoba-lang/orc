@@ -23,7 +23,6 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${ROOT}/.." && pwd)"
 FIXTURE="${ROOT}/fixtures/tiny.orc"
 SRC="${ROOT}/orc.kotoba"
 EXPECTED_VALUE="111102"
@@ -113,28 +112,98 @@ fi
 
 echo "using ${KOTOBA_BIN}"
 
-compile_out="$("${KOTOBA_BIN}" compile "${SRC}" --target wasm -o "${ROOT}/orc.wasm")"
-printf '%s\n' "${compile_out}"
+WORKDIR="$(mktemp -d "${TMPDIR:-/tmp}/kotoba-orc-v1.XXXXXX")"
+trap 'rm -rf "${WORKDIR}"' EXIT
+COMPILE_JSON="${WORKDIR}/compile.json"
+WASM="${WORKDIR}/orc.wasm"
 
-printf '%s\n' "${compile_out}" | python3 -c '
+set +e
+"${KOTOBA_BIN}" compile "${SRC}" --target wasm -o "${WASM}" --json >"${COMPILE_JSON}" 2>"${WORKDIR}/compile.err"
+compile_rc=$?
+set -e
+if [[ "${compile_rc}" -ne 0 ]]; then
+  cat "${COMPILE_JSON}" "${WORKDIR}/compile.err" >&2 || true
+  fail "kotoba compile failed (exit ${compile_rc})"
+fi
+printf '%s\n' "$(cat "${COMPILE_JSON}")"
+
+python3 - "${COMPILE_JSON}" "${WASM}" <<'PY'
+import json
 import sys
-text = sys.stdin.read()
-need = [
-    ":kotoba.cli/ok? true",
-    ":compile/emitted",
-    ":target :wasm32-kotoba-v1",
-    ":value-abi :kotoba.i64/direct-v1",
-    ":value-profile :kotoba.value/i64-v1",
-]
-missing = [item for item in need if item not in text]
-if missing:
-    print("FAIL: compile output missing %s" % ", ".join(missing), file=sys.stderr)
-    sys.exit(1)
-if ":compile/failed" in text:
-    print("FAIL: compile output contains :compile/failed", file=sys.stderr)
-    sys.exit(1)
-print("compile: wasm32-kotoba-v1 i64-v1 emitted")
-'
+from pathlib import Path
+
+WASM_IMPORT_SECTION = 2
+
+
+def read_uleb128(buf, i):
+    shift = 0
+    value = 0
+    while True:
+        if i >= len(buf):
+            raise ValueError("truncated uleb128")
+        byte = buf[i]
+        i += 1
+        value |= (byte & 0x7F) << shift
+        if byte & 0x80 == 0:
+            return value, i
+        shift += 7
+        if shift > 35:
+            raise ValueError("uleb128 too long")
+
+
+def wasm_import_section(buf):
+    if buf[:4] != b"\x00asm":
+        raise ValueError("artifact magic %r is not wasm" % (buf[:4],))
+    if len(buf) < 8:
+        raise ValueError("truncated wasm header")
+    i = 8
+    found = False
+    import_count = None
+    while i < len(buf):
+        section_id = buf[i]
+        i += 1
+        size, i = read_uleb128(buf, i)
+        end = i + size
+        if end > len(buf):
+            raise ValueError("truncated wasm section")
+        payload = buf[i:end]
+        i = end
+        if section_id == WASM_IMPORT_SECTION:
+            found = True
+            import_count, _ = read_uleb128(payload, 0) if payload else (0, 0)
+    return found, import_count
+
+
+# Fail closed on the checker itself before trusting the artifact.
+_no_import = b"\x00asm\x01\x00\x00\x00"
+_empty_import = b"\x00asm\x01\x00\x00\x00\x02\x01\x00"
+if wasm_import_section(_no_import) != (False, None):
+    sys.exit("FAIL: import-section checker failed on a no-section wasm")
+if wasm_import_section(_empty_import) != (True, 0):
+    sys.exit("FAIL: import-section checker failed to see an import section")
+
+report = json.loads(Path(sys.argv[1]).read_text())
+wasm = Path(sys.argv[2])
+if report.get("kotoba.cli/ok?") is not True:
+    sys.exit("FAIL: compile JSON kotoba.cli/ok? is %r" % (report.get("kotoba.cli/ok?"),))
+if report.get("kotoba.cli/code") != "emitted":
+    sys.exit("FAIL: compile JSON kotoba.cli/code is %r, expected emitted" % (report.get("kotoba.cli/code"),))
+data = report.get("kotoba.cli/data") or {}
+profile = data.get("value-profile")
+compat = data.get("compatibility") or {}
+target = compat.get("target")
+if profile != "i64-v1":
+    sys.exit("FAIL: value-profile %r is not i64-v1" % (profile,))
+if target != "wasm32-kotoba-v1":
+    sys.exit("FAIL: target %r is not wasm32-kotoba-v1" % (target,))
+if not wasm.is_file() or wasm.stat().st_size == 0:
+    sys.exit("FAIL: compile did not write a wasm artifact")
+raw = wasm.read_bytes()
+has_imports, import_count = wasm_import_section(raw)
+if has_imports:
+    sys.exit("FAIL: wasm has import section (count=%s); FFI is out of v1 scope" % (import_count,))
+print("compile JSON: ok?=true code=emitted value-profile=i64-v1 target=wasm32-kotoba-v1 import-section=absent")
+PY
 
 run_out="$("${KOTOBA_BIN}" run "${SRC}")"
 printf '%s\n' "${run_out}"
