@@ -6,6 +6,7 @@ Welcome! If you are an AI coding assistant (like GitHub Copilot, Cursor, or Gemi
 Apache ORC includes both Java and C++ libraries that are completely independent of each other.
 - `c++/` - the C++ reader and writer
 - `java/` - the Java reader and writer
+- `kotoba/` - Kotoba v1 header/magic reader (this fork; not a C++/Java replacement)
 - `docker/` - docker scripts to build and test on various linuxes
 - `examples/` - various ORC example files that are used to test compatibility
 - `cmake_modules/` - CMake modules
