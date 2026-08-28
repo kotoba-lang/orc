@@ -45,7 +45,6 @@ The subdirectories are:
 * docker - docker scripts to build and test on various linuxes
 * examples - various ORC example files that are used to test compatibility
 * java - the java reader and writer
-* kotoba - Kotoba v1 header/magic reader on this fork (not a C++/Java replacement)
 * site - the website and documentation
 * tools - the c++ tools for reading and inspecting ORC files
 

@@ -22,16 +22,12 @@ on:
     paths-ignore:
     - 'site/**'
     - 'conan/**'
-    - 'kotoba/**'
-    - '.github/workflows/kotoba.yml'
     branches:
     - main
   pull_request:
     paths-ignore:
     - 'site/**'
     - 'conan/**'
-    - 'kotoba/**'
-    - '.github/workflows/kotoba.yml'
     branches:
     - main
   workflow_call:
